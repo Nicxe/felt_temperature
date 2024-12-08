@@ -21,7 +21,6 @@ from homeassistant.components.weather import (
     ATTR_WEATHER_WIND_SPEED_UNIT,
     DOMAIN as WEATHER_DOMAIN,
 )
-from homeassistant.components.group import expand_entity_ids
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     ATTR_UNIT_OF_MEASUREMENT,
@@ -30,6 +29,8 @@ from homeassistant.const import (
     STATE_UNKNOWN,
     UnitOfSpeed,
     UnitOfTemperature,
+    CONF_NAME,
+    CONF_SOURCE,
 )
 from homeassistant.core import (
     HomeAssistant,
@@ -50,6 +51,7 @@ from .const import (
     ATTR_WIND_SPEED_SOURCE,
     ATTR_WIND_SPEED_SOURCE_VALUE,
     DOMAIN,
+    DEFAULT_NAME
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,17 +61,17 @@ async def async_setup_entry(
     entry: ConfigEntry, 
     async_add_entities: AddEntitiesCallback
 ) -> None:
-    """Set up Felt Temperature (UTCI approx) sensor entities from a config entry."""
-    data = entry.data
-    sources = expand_entity_ids(hass, data.get("source"))
-    name = data.get("name")
+    """Set up Felt Temperature sensor entities from a config entry."""
+
+    sources = entry.options.get(CONF_SOURCE, entry.data.get(CONF_SOURCE, []))
+    name = entry.options.get(CONF_NAME, entry.data.get(CONF_NAME, DEFAULT_NAME))
     unique_id = f"{entry.entry_id}"
 
     async_add_entities([FeltTemperatureSensor(name, sources, unique_id)], True)
 
 
 class FeltTemperatureSensor(SensorEntity):
-    """Felt Temperature Sensor class using a simplified UTCI calculation."""
+    """Felt Temperature Sensor class using a simplified UTCI-like calculation."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:thermometer-lines"
@@ -179,7 +181,6 @@ class FeltTemperatureSensor(SensorEntity):
             entity_unit = state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT)
         elif domain == CLIMATE_DOMAIN:
             temperature = state.attributes.get(ATTR_CURRENT_TEMPERATURE)
-            # Antar °C om oklart
             entity_unit = state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT) or UnitOfTemperature.CELSIUS
         else:
             temperature = state.state
@@ -238,52 +239,10 @@ class FeltTemperatureSensor(SensorEntity):
         return float(wind_speed)
 
     def _calculate_utci(self, ta: float, rh: float, va: float) -> float:
-        """Calculate UTCI given Ta, RH, Va with Tmrt = Ta (simplified)."""
-
-        # Beräkna ångtryck e (hPa)
-        # Standard enligt: e = 6.105 * exp(17.27 * Ta / (237.7 + Ta)) * (RH/100)
+        """Calculate a simplified UTCI-like value."""
         e = 6.105 * math.exp((17.27 * ta) / (237.7 + ta)) * (rh / 100.0)
-
-        # Anta Tmrt = Ta för enkelhets skull:
-        tmrt = ta
-
-        # Nedan följer den fullständiga UTCI-polynomen från
-        # Jendritzky et al. (2012).
-        # Källa: http://www.utci.org/ (UTCI Operational Tool)
-        # Vi tar officiell polynomial approximation:
-        d_t = ta - tmrt  # skillnaden i temperatur (här 0 pga tmrt=ta, men vi behåller formeln)
-        # UTCI polynomial med Tmrt=Ta blir enklare, men vi använder full formel:
-        # Detta kommer i praktiken reducera vissa termer. Men vi behåller hela formeln.
-        
-        # För enkelhet och tids vinnings skull, använd den kompletta formeln men
-        # med d_t=0. Detta gör att alla termer med d_t eller dess potenser försvinner.
-        # Kvar blir ungefär en formel beroende av ta, va, e.
-        # Nedan är en förkortad version då hela polynomet är mycket stort.
-        # För att representera hur man kan göra:
-        
-        # Förenklad approximationsformel vid Tmrt=Ta (d_t=0):
-        # UTCI ~ Ta + (0.607562052) + (-0.0227712343 * Ta) + (0.000806470249 * Ta * Ta)
-        #       + (-0.00284 * e) + (-0.0001 * va * va) ...
-        # Detta är inte den fullständiga formeln men en kraftig förenkling.
-        #
-        # En korrekt implementation av UTCI utan Tmrt-data är tyvärr inte meningsfull.
-        # Nedan anges en mycket förenklad variant:
-        
-        # OBS: Detta är en mycket kraftig förenkling och inte en korrekt UTCI!
-        # I verkligheten bör man använda hela formeln med Tmrt och alla termer.
-        
-        # Minimal approximationsformel (ej officiell, endast demonstration):
-        # Baserat på principer: högre luftfuktighet och vind sänker/ökar upplevd temp marginellt.
-        
-        # Exempel på mycket förenklad formel:
-        # UTCI_approx = Ta + 0.33 * e - 0.70 * va - 4.00
-        # Men detta är i princip tillbaka till Apparent Temperature-formeln.
-        # För att åtminstone skilja oss något, antar vi att utan strålning går vi på en
-        # standardiserad form av UTCI nära Apparent Temperature.
-        
-        # Utan korrekt Tmrt är detta meningslöst, men vi visar ändå en approximation:
+        # Förenklad approximation
         utci_approx = ta + 0.33 * e - 0.70 * va - 4.00
-        
         return utci_approx
 
     async def async_update(self) -> None:
@@ -301,9 +260,6 @@ class FeltTemperatureSensor(SensorEntity):
             _LOGGER.warning("Kan inte få vindhastighet. Vind ignoreras i beräkningen.")
             wind = 0.0
 
-        # Beräkna ett approximerat UTCI-värde.
-        # OBS! Detta är en förenklad formel som använder Apparent Temperature-liknande formel.
-        # En korrekt UTCI kräver full polynomial och Tmrt, vilket vi saknar.
         self._attr_native_value = self._calculate_utci(temp, humd, wind)
         _LOGGER.debug(
             "Nytt (approx) UTCI-värde är %s %s",

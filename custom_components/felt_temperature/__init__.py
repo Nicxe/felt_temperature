@@ -4,15 +4,16 @@ import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
+from homeassistant.helpers.typing import ConfigType
+
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "felt_temperature"
 PLATFORMS = [Platform.SENSOR]
 
-async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Felt Temperature integration from yaml (legacy)."""
-    # Även om vi inte använder yaml-setup behövs ibland denna funktion för att undvika fel.
     return True
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -29,3 +30,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
+
+def async_get_options_flow(config_entry: ConfigEntry):
+    """Get the options flow handler."""
+    from .config_flow import FeltTemperatureOptionsFlowHandler
+    return FeltTemperatureOptionsFlowHandler(config_entry)
