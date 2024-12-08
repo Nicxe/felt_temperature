@@ -1,0 +1,19 @@
+{
+    "domain": "felt_temperature",
+    "name": "Felt Temperature",
+    "version": "0.0.1",
+    "config_flow": true,
+    "documentation": "https://github.com/Nicxe/felt_temperature",
+    "issue_tracker": "https://github.com/Nicxe/felt_temperature/issues",
+    "requirements": [],
+    "dependencies": [],
+    "after_dependencies": [
+        "history",
+        "recorder",
+        "weather"
+    ],
+    "codeowners": [
+        "@Nicxe"
+    ],
+    "iot_class": "calculated"
+}
