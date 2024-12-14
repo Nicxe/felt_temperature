@@ -1,6 +1,6 @@
 NAME = "Felt Temperatur"
 DOMAIN = "felt_temperature"
-VERSION = "0.3"
+VERSION = "0.4"
 ISSUE_URL = "https://github.com/Nicxe/felt_temperature/issues"
 DEFAULT_NAME = "Felt Temperature"
 

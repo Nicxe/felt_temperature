@@ -31,12 +31,14 @@ from homeassistant.const import (
     UnitOfTemperature,
     CONF_NAME,
     CONF_SOURCE,
+    EVENT_HOMEASSISTANT_STARTED,
 )
 from homeassistant.core import (
     HomeAssistant,
     State,
     callback,
     split_entity_id,
+    Event,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -55,6 +57,9 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+RETRY_DELAY = 10  # Sekunder mellan försök om källorna inte är redo
+INITIAL_DELAY = 15  # Sekunder att vänta efter HA start innan första uppdatering
 
 async def async_setup_entry(
     hass: HomeAssistant, 
@@ -92,6 +97,8 @@ class FeltTemperatureSensor(SensorEntity):
         self._temp_val = None
         self._humd_val = None
         self._wind_val = None
+        self._retry_timer = None
+        self._initial_update_done = False
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
@@ -107,40 +114,58 @@ class FeltTemperatureSensor(SensorEntity):
 
     def _setup_sources(self) -> list[str]:
         """Set sources for entity and return list of sources to track."""
+        _LOGGER.debug("Kör _setup_sources() för att identifiera temperatur, fuktighet och vind.")
         entities = set()
+
+        # Nollställ inte redan hittade källor - men om vi upptäcker nya fuktighets-/vindkällor
+        # kan vi sätta dem även om temp redan är funnen.
+        
         for entity_id in self._sources:
             state: State = self.hass.states.get(entity_id)
-            domain = split_entity_id(entity_id)[0]
-            device_class = state.attributes.get(ATTR_DEVICE_CLASS) if state else None
-            unit_of_measurement = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
+            if not state:
+                continue
 
-            # Försök matcha källor även om värden saknas just nu
-            if domain == WEATHER_DOMAIN:
+            domain = split_entity_id(entity_id)[0]
+            device_class = state.attributes.get(ATTR_DEVICE_CLASS)
+            unit_of_measurement = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+
+            # Temperatur
+            if (
+                self._temp is None and (
+                    domain == WEATHER_DOMAIN
+                    or domain == CLIMATE_DOMAIN
+                    or device_class == SensorDeviceClass.TEMPERATURE
+                    or (unit_of_measurement in UnitOfTemperature if unit_of_measurement else False)
+                    or ("temperature" in entity_id.lower())
+                )
+            ):
                 self._temp = entity_id
+                _LOGGER.debug("Hittade temperaturkälla: %s", entity_id)
+
+            # Fuktighet
+            if (
+                self._humd is None and (
+                    domain == WEATHER_DOMAIN
+                    or domain == CLIMATE_DOMAIN
+                    or device_class == SensorDeviceClass.HUMIDITY
+                    or (unit_of_measurement == PERCENTAGE)
+                    or ("humidity" in entity_id.lower())
+                )
+            ):
                 self._humd = entity_id
+                _LOGGER.debug("Hittade fuktighetskälla: %s", entity_id)
+
+            # Vind
+            if (
+                self._wind is None and (
+                    domain == WEATHER_DOMAIN
+                    or (device_class == SensorDeviceClass.WIND_SPEED)
+                    or (unit_of_measurement in UnitOfSpeed if unit_of_measurement else False)
+                    or ("wind" in entity_id.lower())
+                )
+            ):
                 self._wind = entity_id
-            elif domain == CLIMATE_DOMAIN:
-                if self._temp is None:
-                    self._temp = entity_id
-                if self._humd is None:
-                    self._humd = entity_id
-            elif (
-                device_class == SensorDeviceClass.TEMPERATURE
-                or (unit_of_measurement in UnitOfTemperature if unit_of_measurement else False)
-                or ("temperature" in entity_id)
-            ):
-                if self._temp is None:
-                    self._temp = entity_id
-            elif (
-                device_class == SensorDeviceClass.HUMIDITY
-                or unit_of_measurement == PERCENTAGE
-                or ("humidity" in entity_id)
-            ):
-                if self._humd is None:
-                    self._humd = entity_id
-            elif (unit_of_measurement in UnitOfSpeed if unit_of_measurement else False) or ("wind" in entity_id):
-                if self._wind is None:
-                    self._wind = entity_id
+                _LOGGER.debug("Hittade vindkälla: %s", entity_id)
 
             entities.add(entity_id)
 
@@ -151,17 +176,21 @@ class FeltTemperatureSensor(SensorEntity):
         @callback
         def sensor_state_listener(event) -> None:
             """Handle device state changes."""
-            # Här använder vi hass.add_job för att schemalägga uppdatering i eventloop
             self.hass.add_job(self.async_schedule_update_ha_state, True)
 
         sources_to_watch = self._setup_sources()
         async_track_state_change_event(self.hass, sources_to_watch, sensor_state_listener)
 
-        # Använd add_job istället för att direkt anropa async_schedule_update_ha_state i callback
-        def delayed_update(_):
+        # Vänta tills Home Assistant startat fullt innan första uppdateringen + en liten fördröjning
+        @callback
+        def delayed_initial_update(_):
             self.hass.add_job(self.async_schedule_update_ha_state, True)
 
-        async_call_later(self.hass, 5, delayed_update)
+        @callback
+        def handle_ha_started(event: Event) -> None:
+            async_call_later(self.hass, INITIAL_DELAY, delayed_initial_update)
+
+        self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, handle_ha_started)
 
     @staticmethod
     def _has_state(state: str | None) -> bool:
@@ -240,28 +269,55 @@ class FeltTemperatureSensor(SensorEntity):
     def _calculate_utci(self, ta: float, rh: float, va: float) -> float:
         """Calculate a simplified UTCI-like value."""
         e = 6.105 * math.exp((17.27 * ta) / (237.7 + ta)) * (rh / 100.0)
-        # Förenklad approximation
         utci_approx = ta + 0.33 * e - 0.70 * va - 4.00
         return utci_approx
 
     async def async_update(self) -> None:
         """Update sensor state."""
-        self._temp_val = temp = self._get_temperature(self._temp)  # °C
-        self._humd_val = humd = self._get_humidity(self._humd)  # %
-        self._wind_val = wind = self._get_wind_speed(self._wind)  # m/s
+        temp = self._get_temperature(self._temp)
+        humd = self._get_humidity(self._humd)
+        wind = self._get_wind_speed(self._wind)
+
+        # Om vi saknar fuktighet eller vind efter start, försök köra _setup_sources() igen
+        if humd is None or (self._wind is not None and wind is None):
+            _LOGGER.debug("Fuktighet eller vind saknas, försök köra _setup_sources igen.")
+            self._setup_sources()
+            # Försök igen efter att ha kört _setup_sources
+            temp = self._get_temperature(self._temp)
+            humd = self._get_humidity(self._humd)
+            wind = self._get_wind_speed(self._wind)
+
+        self._temp_val = temp
+        self._humd_val = humd
+        self._wind_val = wind
 
         if temp is None or humd is None:
-            _LOGGER.debug("Källor inte klara ännu. Temperatur eller fuktighet saknas.")
+            _LOGGER.debug("Källor inte klara ännu (temp: %s, humd: %s). Försöker igen om %s sek.",
+                          temp, humd, RETRY_DELAY)
             self._attr_native_value = None
+
+            if self._retry_timer is None:
+                def retry_update(_):
+                    self._retry_timer = None
+                    self.hass.add_job(self.async_schedule_update_ha_state, True)
+
+                self._retry_timer = async_call_later(self.hass, RETRY_DELAY, retry_update)
             return
 
         if wind is None:
             _LOGGER.warning("Kan inte få vindhastighet. Vind ignoreras i beräkningen.")
             wind = 0.0
 
+        if self._retry_timer is not None:
+            self._retry_timer()  # Avbryter schemalagd retry
+            self._retry_timer = None
+
         self._attr_native_value = self._calculate_utci(temp, humd, wind)
         _LOGGER.debug(
-            "Nytt (approx) UTCI-värde är %s %s",
+            "Nytt (approx) UTCI-värde är %s %s (temp: %s, humd: %s, wind: %s)",
             self._attr_native_value,
             self._attr_native_unit_of_measurement,
+            temp,
+            humd,
+            wind,
         )
