@@ -40,7 +40,7 @@ from homeassistant.core import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_call_later
 from homeassistant.util.unit_conversion import SpeedConverter, TemperatureConverter
 
 from .const import (
@@ -62,7 +62,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up Felt Temperature sensor entities from a config entry."""
-
     sources = entry.options.get(CONF_SOURCE, entry.data.get(CONF_SOURCE, []))
     name = entry.options.get(CONF_NAME, entry.data.get(CONF_NAME, DEFAULT_NAME))
     unique_id = f"{entry.entry_id}"
@@ -111,45 +110,39 @@ class FeltTemperatureSensor(SensorEntity):
         entities = set()
         for entity_id in self._sources:
             state: State = self.hass.states.get(entity_id)
-            if state is None:
-                continue
-            domain = split_entity_id(state.entity_id)[0]
-            device_class = state.attributes.get(ATTR_DEVICE_CLASS)
-            unit_of_measurement = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
+            domain = split_entity_id(entity_id)[0]
+            device_class = state.attributes.get(ATTR_DEVICE_CLASS) if state else None
+            unit_of_measurement = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
 
+            # Försök matcha källor även om värden saknas just nu
             if domain == WEATHER_DOMAIN:
                 self._temp = entity_id
                 self._humd = entity_id
                 self._wind = entity_id
-                entities.add(entity_id)
             elif domain == CLIMATE_DOMAIN:
-                self._temp = entity_id
-                self._humd = entity_id
-                entities.add(entity_id)
+                if self._temp is None:
+                    self._temp = entity_id
+                if self._humd is None:
+                    self._humd = entity_id
             elif (
                 device_class == SensorDeviceClass.TEMPERATURE
                 or (unit_of_measurement in UnitOfTemperature if unit_of_measurement else False)
+                or ("temperature" in entity_id)
             ):
-                self._temp = entity_id
-                entities.add(entity_id)
+                if self._temp is None:
+                    self._temp = entity_id
             elif (
                 device_class == SensorDeviceClass.HUMIDITY
                 or unit_of_measurement == PERCENTAGE
+                or ("humidity" in entity_id)
             ):
-                self._humd = entity_id
-                entities.add(entity_id)
-            elif unit_of_measurement in UnitOfSpeed if unit_of_measurement else False:
-                self._wind = entity_id
-                entities.add(entity_id)
-            elif "temperature" in entity_id:
-                self._temp = entity_id
-                entities.add(entity_id)
-            elif "humidity" in entity_id:
-                self._humd = entity_id
-                entities.add(entity_id)
-            elif "wind" in entity_id:
-                self._wind = entity_id
-                entities.add(entity_id)
+                if self._humd is None:
+                    self._humd = entity_id
+            elif (unit_of_measurement in UnitOfSpeed if unit_of_measurement else False) or ("wind" in entity_id):
+                if self._wind is None:
+                    self._wind = entity_id
+
+            entities.add(entity_id)
 
         return list(entities)
 
@@ -158,11 +151,17 @@ class FeltTemperatureSensor(SensorEntity):
         @callback
         def sensor_state_listener(event) -> None:
             """Handle device state changes."""
-            self.async_schedule_update_ha_state(force_refresh=True)
+            # Här använder vi hass.add_job för att schemalägga uppdatering i eventloop
+            self.hass.add_job(self.async_schedule_update_ha_state, True)
 
         sources_to_watch = self._setup_sources()
         async_track_state_change_event(self.hass, sources_to_watch, sensor_state_listener)
-        self.async_schedule_update_ha_state(force_refresh=True)
+
+        # Använd add_job istället för att direkt anropa async_schedule_update_ha_state i callback
+        def delayed_update(_):
+            self.hass.add_job(self.async_schedule_update_ha_state, True)
+
+        async_call_later(self.hass, 5, delayed_update)
 
     @staticmethod
     def _has_state(state: str | None) -> bool:
