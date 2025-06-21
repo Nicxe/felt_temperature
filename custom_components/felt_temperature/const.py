@@ -1,4 +1,4 @@
-NAME = "Felt Temperatur"
+NAME = "Felt Temperature"
 DOMAIN = "felt_temperature"
 VERSION = "0.4"
 ISSUE_URL = "https://github.com/Nicxe/felt_temperature/issues"
