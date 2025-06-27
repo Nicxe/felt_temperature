@@ -47,7 +47,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_call_later,
 )
-from homeassistant.helpers.typing import CALLBACK_TYPE
+from homeassistant.core import CALLBACK_TYPE
 from homeassistant.util.unit_conversion import SpeedConverter, TemperatureConverter
 
 from .const import (
