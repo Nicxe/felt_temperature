@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Felt Temperature Setup"
+      }
+    },
+    "error": {
+      "no_source": "Please select at least one entity."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Felt Temperature Options"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Felt Temperature-installation"
+      }
+    },
+    "error": {
+      "no_source": "Välj minst en enhet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Felt Temperature-alternativ"
+      }
+    }
+  }
+}

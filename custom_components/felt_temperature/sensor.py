@@ -41,8 +41,13 @@ from homeassistant.core import (
     Event,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_state_change_event, async_call_later
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_call_later,
+)
+from homeassistant.helpers.typing import CALLBACK_TYPE
 from homeassistant.util.unit_conversion import SpeedConverter, TemperatureConverter
 
 from .const import (
@@ -97,7 +102,8 @@ class FeltTemperatureSensor(SensorEntity):
         self._temp_val = None
         self._humd_val = None
         self._wind_val = None
-        self._retry_timer = None
+        self._retry_timer: CALLBACK_TYPE | None = None
+        self._unsub_state_listener: CALLBACK_TYPE | None = None
         self._initial_update_done = False
 
     @property
@@ -112,9 +118,19 @@ class FeltTemperatureSensor(SensorEntity):
             ATTR_WIND_SPEED_SOURCE_VALUE: self._wind_val,
         }
 
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information for grouping the entity."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._attr_unique_id)},
+            name=self._attr_name or DEFAULT_NAME,
+        )
+
     def _setup_sources(self) -> list[str]:
         """Set sources for entity and return list of sources to track."""
-        _LOGGER.debug("Kör _setup_sources() för att identifiera temperatur, fuktighet och vind.")
+        _LOGGER.debug(
+            "Running _setup_sources() to identify temperature, humidity and wind sources."
+        )
         entities = set()
 
         # Nollställ inte redan hittade källor - men om vi upptäcker nya fuktighets-/vindkällor
@@ -140,7 +156,7 @@ class FeltTemperatureSensor(SensorEntity):
                 )
             ):
                 self._temp = entity_id
-                _LOGGER.debug("Hittade temperaturkälla: %s", entity_id)
+                _LOGGER.debug("Found temperature source: %s", entity_id)
 
             # Fuktighet
             if (
@@ -153,7 +169,7 @@ class FeltTemperatureSensor(SensorEntity):
                 )
             ):
                 self._humd = entity_id
-                _LOGGER.debug("Hittade fuktighetskälla: %s", entity_id)
+                _LOGGER.debug("Found humidity source: %s", entity_id)
 
             # Vind
             if (
@@ -165,7 +181,7 @@ class FeltTemperatureSensor(SensorEntity):
                 )
             ):
                 self._wind = entity_id
-                _LOGGER.debug("Hittade vindkälla: %s", entity_id)
+                _LOGGER.debug("Found wind source: %s", entity_id)
 
             entities.add(entity_id)
 
@@ -179,7 +195,9 @@ class FeltTemperatureSensor(SensorEntity):
             self.hass.add_job(self.async_schedule_update_ha_state, True)
 
         sources_to_watch = self._setup_sources()
-        async_track_state_change_event(self.hass, sources_to_watch, sensor_state_listener)
+        self._unsub_state_listener = async_track_state_change_event(
+            self.hass, sources_to_watch, sensor_state_listener
+        )
 
         # Vänta tills Home Assistant startat fullt innan första uppdateringen + en liten fördröjning
         @callback
@@ -191,6 +209,15 @@ class FeltTemperatureSensor(SensorEntity):
             async_call_later(self.hass, INITIAL_DELAY, delayed_initial_update)
 
         self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, handle_ha_started)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up when entity is removed from Home Assistant."""
+        if self._unsub_state_listener is not None:
+            self._unsub_state_listener()
+            self._unsub_state_listener = None
+        if self._retry_timer is not None:
+            self._retry_timer()
+            self._retry_timer = None
 
     @staticmethod
     def _has_state(state: str | None) -> bool:
@@ -278,9 +305,11 @@ class FeltTemperatureSensor(SensorEntity):
         humd = self._get_humidity(self._humd)
         wind = self._get_wind_speed(self._wind)
 
-        # Om vi saknar fuktighet eller vind efter start, försök köra _setup_sources() igen
+        # If humidity or wind is missing after startup, try _setup_sources() again
         if humd is None or (self._wind is not None and wind is None):
-            _LOGGER.debug("Fuktighet eller vind saknas, försök köra _setup_sources igen.")
+            _LOGGER.debug(
+                "Humidity or wind missing, running _setup_sources again."
+            )
             self._setup_sources()
             # Försök igen efter att ha kört _setup_sources
             temp = self._get_temperature(self._temp)
@@ -292,8 +321,12 @@ class FeltTemperatureSensor(SensorEntity):
         self._wind_val = wind
 
         if temp is None or humd is None:
-            _LOGGER.debug("Källor inte klara ännu (temp: %s, humd: %s). Försöker igen om %s sek.",
-                          temp, humd, RETRY_DELAY)
+            _LOGGER.debug(
+                "Sources not ready yet (temp: %s, humd: %s). Trying again in %s sec.",
+                temp,
+                humd,
+                RETRY_DELAY,
+            )
             self._attr_native_value = None
 
             if self._retry_timer is None:
@@ -305,7 +338,9 @@ class FeltTemperatureSensor(SensorEntity):
             return
 
         if wind is None:
-            _LOGGER.warning("Kan inte få vindhastighet. Vind ignoreras i beräkningen.")
+            _LOGGER.warning(
+                "Unable to get wind speed. Wind will be ignored in the calculation."
+            )
             wind = 0.0
 
         if self._retry_timer is not None:
@@ -314,7 +349,7 @@ class FeltTemperatureSensor(SensorEntity):
 
         self._attr_native_value = self._calculate_utci(temp, humd, wind)
         _LOGGER.debug(
-            "Nytt (approx) UTCI-värde är %s %s (temp: %s, humd: %s, wind: %s)",
+            "New (approx) UTCI value is %s %s (temp: %s, humd: %s, wind: %s)",
             self._attr_native_value,
             self._attr_native_unit_of_measurement,
             temp,
