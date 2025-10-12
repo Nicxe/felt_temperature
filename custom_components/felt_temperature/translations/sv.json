@@ -2,17 +2,56 @@
   "config": {
     "step": {
       "user": {
-        "title": "Felt Temperature-installation"
+        "title": "Felt Temperature-installation",
+        "data": {
+          "name": "Namn",
+          "mode": "Konfigurationsläge"
+        }
+      },
+      "weather": {
+        "title": "Välj väderenhet",
+        "data": {
+          "temperature_source": "Väderentitet"
+        }
+      },
+      "separate": {
+        "title": "Välj separata källor",
+        "data": {
+          "temperature_source": "Temperaturkälla",
+          "humidity_source": "Fuktighetskälla",
+          "wind_source": "Vindkälla (valfri)"
+        }
       }
     },
     "error": {
-      "no_source": "Välj minst en enhet."
+      "no_source": "Välj minst en enhet.",
+      "missing_weather": "Välj en väderenhet.",
+      "missing_temperature": "Välj en temperaturkälla.",
+      "missing_humidity": "Välj en fuktighetskälla."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Felt Temperature-alternativ"
+        "title": "Felt Temperature-alternativ",
+        "data": {
+          "name": "Namn",
+          "mode": "Konfigurationsläge"
+        }
+      },
+      "weather": {
+        "title": "Välj väderenhet",
+        "data": {
+          "temperature_source": "Väderentitet"
+        }
+      },
+      "separate": {
+        "title": "Välj separata källor",
+        "data": {
+          "temperature_source": "Temperaturkälla",
+          "humidity_source": "Fuktighetskälla",
+          "wind_source": "Vindkälla (valfri)"
+        }
       }
     }
   }

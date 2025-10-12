@@ -1,28 +1,57 @@
-# Felt Temperature (UTCI Approximation)
+# Felt Temperature
 
-## English
+An easy-to-use “felt temperature” sensor for Home Assistant based on a simplified UTCI‑like approach. It combines temperature, humidity and (optionally) wind to estimate how the weather feels.
 
-This project uses a simplified calculation to approximate the Universal Thermal Climate Index (UTCI). The UTCI is a comprehensive measure of how outdoor conditions "feel" to humans, normally taking into account factors like:
+This is a pragmatic approximation, not the official UTCI. It’s built for simple setup and fast results.
 
-- Air temperature (Ta)
-- Mean radiant temperature (Tmrt)
-- Wind speed (Va)
-- Humidity (via vapor pressure, e)
+## Requirements
+- Temperature and relative humidity sources are required.
+- Wind source is optional (recommended for better realism).
+- You can either select one `weather.*` entity (which provides all values) or choose separate sources for each.
 
-A full UTCI calculation involves a highly complex equation with over 100 terms and requires accurate Tmrt data for realistic results. In this implementation, we simplify the approach:
+## Installation
+1. Copy this custom component into `custom_components/felt_temperature/` or install via HACS (if available).
+2. Restart Home Assistant.
+3. Add the integration: Settings → Devices & Services → Add Integration → Felt Temperature.
 
-1. **Tmrt ≈ Ta**  
-   We assume the mean radiant temperature (Tmrt) equals the air temperature (Ta). In reality, Tmrt is affected by solar radiation, surrounding surfaces, and other radiative factors.
+## Configuration
 
-2. **Simple Vapor Pressure Calculation**  
-   The vapor pressure e is derived from temperature and relative humidity (RH):
+You can configure the integration in two ways:
 
-3. **Highly Simplified UTCI Approximation**  
-Instead of the full polynomial equation, we use a simpler formula that resembles an "apparent temperature" approach:
+1) Weather mode (recommended)
+- Select a single `weather.*` entity (e.g. `weather.home`).
+- The integration reads temperature, humidity and wind from the weather entity.
+- If wind is not available, it will be ignored (treated as 0 m/s).
 
+2) Separate sources
+- Select a temperature source (sensor/climate/weather) – required.
+- Select a humidity source (sensor/climate/weather) – required.
+- Select a wind source (sensor/weather) – optional.
 
-**Note:** This is **not** an official or accurate UTCI formula. It is merely an approximation to demonstrate how to integrate a more complex index calculation into Home Assistant. For truly accurate UTCI values, proper Tmrt data and the full official calculation are required.
+Tips
+- Prefer outdoor sensors for an outdoor felt temperature.
+- Ensure correct units: °C, %, and m/s (conversion is handled when possible).
 
-**Summary:**  
-The sensor provides a value that approximates UTCI but is not a fully accurate representation. For proper UTCI usage, you need correct Tmrt and the complete polynomial calculation method.
+## Entity attributes
+- `temperature_source` / `temperature_source_value`
+- `humidity_source` / `humidity_source_value`
+- `wind_speed_source` / `wind_speed_source_value`
+
+## How it works (short)
+The integration uses a simple equation inspired by apparent temperature concepts:
+
+```
+felt ≈ Ta + 0.33 * e - 0.70 * Va - 4.00
+```
+
+where `e` is vapor pressure derived from temperature and RH, `Va` is wind speed in m/s, and `Ta` is air temperature in °C. This is intentionally simplified for reliability and performance.
+
+## Troubleshooting
+- Sensor shows no value: make sure temperature and humidity sources are available and not `unknown`/`unavailable`.
+- Wind is ignored: wind source missing or not providing a numeric value.
+- Odd values: verify units and that sensors are outdoor if that’s your use case.
+
+## Notes
+- This is an approximation of felt temperature and not the full UTCI implementation.
+- Contributions and issues: see the issue tracker.
 

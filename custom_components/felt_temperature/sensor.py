@@ -58,7 +58,13 @@ from .const import (
     ATTR_WIND_SPEED_SOURCE,
     ATTR_WIND_SPEED_SOURCE_VALUE,
     DOMAIN,
-    DEFAULT_NAME
+    DEFAULT_NAME,
+    CONF_MODE,
+    MODE_WEATHER,
+    MODE_SEPARATE,
+    CONF_TEMPERATURE_SOURCE,
+    CONF_HUMIDITY_SOURCE,
+    CONF_WIND_SOURCE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,7 +78,22 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up Felt Temperature sensor entities from a config entry."""
-    sources = entry.options.get(CONF_SOURCE, entry.data.get(CONF_SOURCE, []))
+    # Build sources list from new explicit options if available; fallback to legacy CONF_SOURCE list
+    mode = entry.options.get(CONF_MODE, entry.data.get(CONF_MODE))
+    sources: list[str] = []
+    if mode == MODE_WEATHER:
+        weather_entity = entry.options.get(CONF_TEMPERATURE_SOURCE, entry.data.get(CONF_TEMPERATURE_SOURCE))
+        if weather_entity:
+            sources = [weather_entity]
+    elif mode == MODE_SEPARATE:
+        temp_entity = entry.options.get(CONF_TEMPERATURE_SOURCE, entry.data.get(CONF_TEMPERATURE_SOURCE))
+        hum_entity = entry.options.get(CONF_HUMIDITY_SOURCE, entry.data.get(CONF_HUMIDITY_SOURCE))
+        wind_entity = entry.options.get(CONF_WIND_SOURCE, entry.data.get(CONF_WIND_SOURCE))
+        for eid in [temp_entity, hum_entity, wind_entity]:
+            if eid:
+                sources.append(eid)
+    else:
+        sources = entry.options.get(CONF_SOURCE, entry.data.get(CONF_SOURCE, []))
     name = entry.options.get(CONF_NAME, entry.data.get(CONF_NAME, DEFAULT_NAME))
     unique_id = f"{entry.entry_id}"
 

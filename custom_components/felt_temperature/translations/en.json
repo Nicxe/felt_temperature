@@ -2,17 +2,56 @@
   "config": {
     "step": {
       "user": {
-        "title": "Felt Temperature Setup"
+        "title": "Felt Temperature Setup",
+        "data": {
+          "name": "Name",
+          "mode": "Configuration mode"
+        }
+      },
+      "weather": {
+        "title": "Select weather entity",
+        "data": {
+          "temperature_source": "Weather entity"
+        }
+      },
+      "separate": {
+        "title": "Select separate sources",
+        "data": {
+          "temperature_source": "Temperature source",
+          "humidity_source": "Humidity source",
+          "wind_source": "Wind source (optional)"
+        }
       }
     },
     "error": {
-      "no_source": "Please select at least one entity."
+      "no_source": "Please select at least one entity.",
+      "missing_weather": "Please select a weather entity.",
+      "missing_temperature": "Please select a temperature source.",
+      "missing_humidity": "Please select a humidity source."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Felt Temperature Options"
+        "title": "Felt Temperature Options",
+        "data": {
+          "name": "Name",
+          "mode": "Configuration mode"
+        }
+      },
+      "weather": {
+        "title": "Select weather entity",
+        "data": {
+          "temperature_source": "Weather entity"
+        }
+      },
+      "separate": {
+        "title": "Select separate sources",
+        "data": {
+          "temperature_source": "Temperature source",
+          "humidity_source": "Humidity source",
+          "wind_source": "Wind source (optional)"
+        }
       }
     }
   }
