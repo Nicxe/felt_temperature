@@ -1,6 +1,7 @@
 import logging
 import math
 from collections.abc import Mapping
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -71,6 +72,8 @@ _LOGGER = logging.getLogger(__name__)
 
 RETRY_DELAY = 10  # Sekunder mellan försök om källorna inte är redo
 INITIAL_DELAY = 15  # Sekunder att vänta efter HA start innan första uppdatering
+
+_ONE_DECIMAL = Decimal("0.1")
 
 async def async_setup_entry(
     hass: HomeAssistant, 
@@ -245,6 +248,17 @@ class FeltTemperatureSensor(SensorEntity):
         """Return True if state has any value."""
         return state not in [None, STATE_UNKNOWN, STATE_UNAVAILABLE, "None", ""]
 
+    @staticmethod
+    def _round_to_one_decimal(value: float | int | str | None) -> float | None:
+        """Round to exactly one decimal to avoid float artifacts in state."""
+        if value is None:
+            return None
+        try:
+            d = Decimal(str(value)).quantize(_ONE_DECIMAL, rounding=ROUND_HALF_UP)
+        except (InvalidOperation, ValueError, TypeError):
+            return None
+        return float(d)
+
     def _get_temperature(self, entity_id: str | None) -> float | None:
         if entity_id is None:
             return None
@@ -368,7 +382,9 @@ class FeltTemperatureSensor(SensorEntity):
             self._retry_timer()  # Avbryter schemalagd retry
             self._retry_timer = None
 
-        self._attr_native_value = self._calculate_utci(temp, humd, wind)
+        self._attr_native_value = self._round_to_one_decimal(
+            self._calculate_utci(temp, humd, wind)
+        )
         _LOGGER.debug(
             "New (approx) UTCI value is %s %s (temp: %s, humd: %s, wind: %s)",
             self._attr_native_value,

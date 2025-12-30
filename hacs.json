@@ -1,5 +1,6 @@
 {
     "name": "Felt Temperature",
-    "country": ["SE"]
+    "zip_release": true,
+    "filename": "felt_temperature.zip"    
 }
   
