@@ -24,6 +24,7 @@ from homeassistant.components.weather import (
 )
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
+    ATTR_TEMPERATURE_UNIT,
     ATTR_UNIT_OF_MEASUREMENT,
     PERCENTAGE,
     STATE_UNAVAILABLE,
@@ -75,23 +76,30 @@ INITIAL_DELAY = 15  # Sekunder att vänta efter HA start innan första uppdateri
 
 _ONE_DECIMAL = Decimal("0.1")
 
+
 async def async_setup_entry(
-    hass: HomeAssistant, 
-    entry: ConfigEntry, 
-    async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up Felt Temperature sensor entities from a config entry."""
     # Build sources list from new explicit options if available; fallback to legacy CONF_SOURCE list
     mode = entry.options.get(CONF_MODE, entry.data.get(CONF_MODE))
     sources: list[str] = []
     if mode == MODE_WEATHER:
-        weather_entity = entry.options.get(CONF_TEMPERATURE_SOURCE, entry.data.get(CONF_TEMPERATURE_SOURCE))
+        weather_entity = entry.options.get(
+            CONF_TEMPERATURE_SOURCE, entry.data.get(CONF_TEMPERATURE_SOURCE)
+        )
         if weather_entity:
             sources = [weather_entity]
     elif mode == MODE_SEPARATE:
-        temp_entity = entry.options.get(CONF_TEMPERATURE_SOURCE, entry.data.get(CONF_TEMPERATURE_SOURCE))
-        hum_entity = entry.options.get(CONF_HUMIDITY_SOURCE, entry.data.get(CONF_HUMIDITY_SOURCE))
-        wind_entity = entry.options.get(CONF_WIND_SOURCE, entry.data.get(CONF_WIND_SOURCE))
+        temp_entity = entry.options.get(
+            CONF_TEMPERATURE_SOURCE, entry.data.get(CONF_TEMPERATURE_SOURCE)
+        )
+        hum_entity = entry.options.get(
+            CONF_HUMIDITY_SOURCE, entry.data.get(CONF_HUMIDITY_SOURCE)
+        )
+        wind_entity = entry.options.get(
+            CONF_WIND_SOURCE, entry.data.get(CONF_WIND_SOURCE)
+        )
         for eid in [temp_entity, hum_entity, wind_entity]:
             if eid:
                 sources.append(eid)
@@ -111,7 +119,6 @@ class FeltTemperatureSensor(SensorEntity):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_should_poll = False
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_suggested_display_precision = 1
 
     def __init__(self, name: str | None, sources: list[str], unique_id: str) -> None:
@@ -150,6 +157,13 @@ class FeltTemperatureSensor(SensorEntity):
             name=self._attr_name or DEFAULT_NAME,
         )
 
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the unit of measurement based on HA global settings."""
+        if self.hass is None:
+            return UnitOfTemperature.CELSIUS
+        return self.hass.config.units.temperature_unit or UnitOfTemperature.CELSIUS
+
     def _setup_sources(self) -> list[str]:
         """Set sources for entity and return list of sources to track."""
         _LOGGER.debug(
@@ -159,7 +173,7 @@ class FeltTemperatureSensor(SensorEntity):
 
         # Nollställ inte redan hittade källor - men om vi upptäcker nya fuktighets-/vindkällor
         # kan vi sätta dem även om temp redan är funnen.
-        
+
         for entity_id in self._sources:
             state: State = self.hass.states.get(entity_id)
             if not state:
@@ -170,39 +184,39 @@ class FeltTemperatureSensor(SensorEntity):
             unit_of_measurement = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
 
             # Temperatur
-            if (
-                self._temp is None and (
-                    domain == WEATHER_DOMAIN
-                    or domain == CLIMATE_DOMAIN
-                    or device_class == SensorDeviceClass.TEMPERATURE
-                    or (unit_of_measurement in UnitOfTemperature if unit_of_measurement else False)
-                    or ("temperature" in entity_id.lower())
+            if self._temp is None and (
+                domain == WEATHER_DOMAIN
+                or domain == CLIMATE_DOMAIN
+                or device_class == SensorDeviceClass.TEMPERATURE
+                or (
+                    unit_of_measurement in UnitOfTemperature
+                    if unit_of_measurement
+                    else False
                 )
+                or ("temperature" in entity_id.lower())
             ):
                 self._temp = entity_id
                 _LOGGER.debug("Found temperature source: %s", entity_id)
 
             # Fuktighet
-            if (
-                self._humd is None and (
-                    domain == WEATHER_DOMAIN
-                    or domain == CLIMATE_DOMAIN
-                    or device_class == SensorDeviceClass.HUMIDITY
-                    or (unit_of_measurement == PERCENTAGE)
-                    or ("humidity" in entity_id.lower())
-                )
+            if self._humd is None and (
+                domain == WEATHER_DOMAIN
+                or domain == CLIMATE_DOMAIN
+                or device_class == SensorDeviceClass.HUMIDITY
+                or (unit_of_measurement == PERCENTAGE)
+                or ("humidity" in entity_id.lower())
             ):
                 self._humd = entity_id
                 _LOGGER.debug("Found humidity source: %s", entity_id)
 
             # Vind
-            if (
-                self._wind is None and (
-                    domain == WEATHER_DOMAIN
-                    or (device_class == SensorDeviceClass.WIND_SPEED)
-                    or (unit_of_measurement in UnitOfSpeed if unit_of_measurement else False)
-                    or ("wind" in entity_id.lower())
+            if self._wind is None and (
+                domain == WEATHER_DOMAIN
+                or (device_class == SensorDeviceClass.WIND_SPEED)
+                or (
+                    unit_of_measurement in UnitOfSpeed if unit_of_measurement else False
                 )
+                or ("wind" in entity_id.lower())
             ):
                 self._wind = entity_id
                 _LOGGER.debug("Found wind source: %s", entity_id)
@@ -213,6 +227,7 @@ class FeltTemperatureSensor(SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         """Register callbacks."""
+
         @callback
         def sensor_state_listener(event) -> None:
             """Handle device state changes."""
@@ -271,7 +286,10 @@ class FeltTemperatureSensor(SensorEntity):
             entity_unit = state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT)
         elif domain == CLIMATE_DOMAIN:
             temperature = state.attributes.get(ATTR_CURRENT_TEMPERATURE)
-            entity_unit = state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT) or UnitOfTemperature.CELSIUS
+            entity_unit = (
+                state.attributes.get(ATTR_TEMPERATURE_UNIT)
+                or state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT)
+            )
         else:
             temperature = state.state
             entity_unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
@@ -279,12 +297,33 @@ class FeltTemperatureSensor(SensorEntity):
         if not self._has_state(temperature):
             return None
 
+        if not entity_unit:
+            entity_unit = (
+                self.hass.config.units.temperature_unit or UnitOfTemperature.CELSIUS
+            )
+
         try:
-            temperature = TemperatureConverter.convert(float(temperature), entity_unit, UnitOfTemperature.CELSIUS)
-        except ValueError:
-            _LOGGER.exception('Could not convert value "%s" to float', state)
+            temperature_value = float(temperature)
+        except (ValueError, TypeError):
+            _LOGGER.warning(
+                "Invalid temperature value '%s' for %s",
+                temperature,
+                state.entity_id,
+            )
             return None
-        return float(temperature)
+
+        try:
+            temperature_c = TemperatureConverter.convert(
+                temperature_value, entity_unit, UnitOfTemperature.CELSIUS
+            )
+        except ValueError:
+            _LOGGER.warning(
+                "Unsupported temperature unit '%s' for %s",
+                entity_unit,
+                state.entity_id,
+            )
+            return None
+        return float(temperature_c)
 
     def _get_humidity(self, entity_id: str | None) -> float | None:
         if entity_id is None:
@@ -322,7 +361,9 @@ class FeltTemperatureSensor(SensorEntity):
             return None
 
         try:
-            wind_speed = SpeedConverter.convert(float(wind_speed), entity_unit, UnitOfSpeed.METERS_PER_SECOND)
+            wind_speed = SpeedConverter.convert(
+                float(wind_speed), entity_unit, UnitOfSpeed.METERS_PER_SECOND
+            )
         except ValueError:
             _LOGGER.exception('Could not convert value "%s" to float', state)
             return None
@@ -334,6 +375,21 @@ class FeltTemperatureSensor(SensorEntity):
         utci_approx = ta + 0.33 * e - 0.70 * va - 4.00
         return utci_approx
 
+    def _to_output_unit(self, temperature_c: float | None) -> float | None:
+        """Convert Celsius to the sensor output unit."""
+        if temperature_c is None:
+            return None
+        output_unit = self.native_unit_of_measurement
+        if output_unit == UnitOfTemperature.CELSIUS:
+            return temperature_c
+        try:
+            return TemperatureConverter.convert(
+                temperature_c, UnitOfTemperature.CELSIUS, output_unit
+            )
+        except ValueError:
+            _LOGGER.warning("Unsupported output temperature unit '%s'", output_unit)
+            return temperature_c
+
     async def async_update(self) -> None:
         """Update sensor state."""
         temp = self._get_temperature(self._temp)
@@ -342,16 +398,14 @@ class FeltTemperatureSensor(SensorEntity):
 
         # If humidity or wind is missing after startup, try _setup_sources() again
         if humd is None or (self._wind is not None and wind is None):
-            _LOGGER.debug(
-                "Humidity or wind missing, running _setup_sources again."
-            )
+            _LOGGER.debug("Humidity or wind missing, running _setup_sources again.")
             self._setup_sources()
             # Försök igen efter att ha kört _setup_sources
             temp = self._get_temperature(self._temp)
             humd = self._get_humidity(self._humd)
             wind = self._get_wind_speed(self._wind)
 
-        self._temp_val = temp
+        self._temp_val = self._to_output_unit(temp)
         self._humd_val = humd
         self._wind_val = wind
 
@@ -365,11 +419,14 @@ class FeltTemperatureSensor(SensorEntity):
             self._attr_native_value = None
 
             if self._retry_timer is None:
+
                 def retry_update(_):
                     self._retry_timer = None
                     self.hass.add_job(self.async_schedule_update_ha_state, True)
 
-                self._retry_timer = async_call_later(self.hass, RETRY_DELAY, retry_update)
+                self._retry_timer = async_call_later(
+                    self.hass, RETRY_DELAY, retry_update
+                )
             return
 
         if wind is None:
@@ -382,14 +439,17 @@ class FeltTemperatureSensor(SensorEntity):
             self._retry_timer()  # Avbryter schemalagd retry
             self._retry_timer = None
 
+        output_unit = self.native_unit_of_measurement
+        utci_c = self._calculate_utci(temp, humd, wind)
         self._attr_native_value = self._round_to_one_decimal(
-            self._calculate_utci(temp, humd, wind)
+            self._to_output_unit(utci_c)
         )
+        self._temp_val = self._round_to_one_decimal(self._temp_val)
         _LOGGER.debug(
             "New (approx) UTCI value is %s %s (temp: %s, humd: %s, wind: %s)",
             self._attr_native_value,
-            self._attr_native_unit_of_measurement,
-            temp,
+            output_unit,
+            self._temp_val,
             humd,
             wind,
         )

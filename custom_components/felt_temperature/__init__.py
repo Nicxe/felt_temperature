@@ -12,9 +12,11 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.SENSOR]
 
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Felt Temperature integration from yaml (legacy)."""
     return True
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Felt Temperature from a config entry."""
@@ -24,6 +26,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload Felt Temperature config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -31,7 +34,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
     return unload_ok
 
+
 def async_get_options_flow(config_entry: ConfigEntry):
     """Get the options flow handler."""
     from .config_flow import FeltTemperatureOptionsFlowHandler
+
     return FeltTemperatureOptionsFlowHandler(config_entry)
