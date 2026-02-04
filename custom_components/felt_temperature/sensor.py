@@ -24,7 +24,6 @@ from homeassistant.components.weather import (
 )
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
-    ATTR_TEMPERATURE_UNIT,
     ATTR_UNIT_OF_MEASUREMENT,
     PERCENTAGE,
     STATE_UNAVAILABLE,
@@ -75,6 +74,7 @@ RETRY_DELAY = 10  # Sekunder mellan försök om källorna inte är redo
 INITIAL_DELAY = 15  # Sekunder att vänta efter HA start innan första uppdatering
 
 _ONE_DECIMAL = Decimal("0.1")
+_ATTR_TEMPERATURE_UNIT = "temperature_unit"
 
 
 async def async_setup_entry(
@@ -287,7 +287,7 @@ class FeltTemperatureSensor(SensorEntity):
         elif domain == CLIMATE_DOMAIN:
             temperature = state.attributes.get(ATTR_CURRENT_TEMPERATURE)
             entity_unit = (
-                state.attributes.get(ATTR_TEMPERATURE_UNIT)
+                state.attributes.get(_ATTR_TEMPERATURE_UNIT)
                 or state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT)
             )
         else:
