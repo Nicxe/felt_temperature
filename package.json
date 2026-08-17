@@ -1,19 +1,21 @@
 {
   "private": true,
   "devDependencies": {
-    "@nicxe/semantic-release-config": "^1.0.5",
+    "@nicxe/semantic-release-config": "^1.2.3",
     "@semantic-release/commit-analyzer": "^13.0.0",
     "@semantic-release/exec": "^7.0.0",
-    "@semantic-release/github": "^12.0.0",
+    "@semantic-release/github": "^12.0.8",
     "@semantic-release/release-notes-generator": "^14.0.0",
-    "conventional-changelog-conventionalcommits": "^9.0.0",
-    "semantic-release": "^25.0.2"
+    "conventional-changelog-conventionalcommits": "^9.3.1",
+    "semantic-release": "^25.0.5"
   },
   "overrides": {
+    "@semantic-release/npm": "npm:@semantic-release/error@^4.0.0",
     "tar": "^7.5.11",
-    "npm": ">=11.10.1",
     "cross-spawn": "^7.0.6",
     "brace-expansion": "^2.0.2",
-    "undici": ">=7.24.0"
+    "undici": ">=7.24.0",
+    "picomatch": ">=4.0.4",
+    "npm": ">=11.18.0"
   }
 }
