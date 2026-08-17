@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.selector import selector
+import voluptuous as vol
 
 from .const import (
-    DOMAIN,
-    DEFAULT_NAME,
-    CONF_MODE,
-    MODE_WEATHER,
-    MODE_SEPARATE,
-    CONF_TEMPERATURE_SOURCE,
     CONF_HUMIDITY_SOURCE,
+    CONF_MODE,
+    CONF_TEMPERATURE_SOURCE,
     CONF_WIND_SOURCE,
+    DEFAULT_NAME,
+    DOMAIN,
+    MODE_SEPARATE,
+    MODE_WEATHER,
 )
 
 
@@ -244,6 +244,7 @@ class FeltTemperatureFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     **(config_entry.data if config_entry else {}),
                     **self._data,
                     **user_input,
+                    CONF_WIND_SOURCE: user_input.get(CONF_WIND_SOURCE),
                 }
                 if config_entry:
                     self.hass.config_entries.async_update_entry(
@@ -270,7 +271,10 @@ class FeltTemperatureFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                         }
                     }
                 ),
-                vol.Optional(CONF_WIND_SOURCE, default=current_wind): selector(
+                vol.Optional(
+                    CONF_WIND_SOURCE,
+                    description={"suggested_value": current_wind},
+                ): selector(
                     {
                         "entity": {
                             "multiple": False,
@@ -378,7 +382,12 @@ class FeltTemperatureOptionsFlowHandler(config_entries.OptionsFlow):
                 errors["base"] = "missing_humidity"
             else:
                 return self.async_create_entry(
-                    title="", data={**self._data, **user_input}
+                    title="",
+                    data={
+                        **self._data,
+                        **user_input,
+                        CONF_WIND_SOURCE: user_input.get(CONF_WIND_SOURCE),
+                    },
                 )
 
         schema = vol.Schema(
@@ -399,7 +408,10 @@ class FeltTemperatureOptionsFlowHandler(config_entries.OptionsFlow):
                         }
                     }
                 ),
-                vol.Optional(CONF_WIND_SOURCE, default=current_wind): selector(
+                vol.Optional(
+                    CONF_WIND_SOURCE,
+                    description={"suggested_value": current_wind},
+                ): selector(
                     {
                         "entity": {
                             "multiple": False,
