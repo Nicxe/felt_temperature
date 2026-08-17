@@ -1,18 +1,18 @@
+from collections.abc import Mapping
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import logging
 import math
-from collections.abc import Mapping
-from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Any
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorStateClass,
-)
 from homeassistant.components.climate import (
     ATTR_CURRENT_HUMIDITY,
     ATTR_CURRENT_TEMPERATURE,
     DOMAIN as CLIMATE_DOMAIN,
+)
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
 )
 from homeassistant.components.weather import (
     ATTR_WEATHER_HUMIDITY,
@@ -22,33 +22,33 @@ from homeassistant.components.weather import (
     ATTR_WEATHER_WIND_SPEED_UNIT,
     DOMAIN as WEATHER_DOMAIN,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     ATTR_UNIT_OF_MEASUREMENT,
+    CONF_NAME,
+    CONF_SOURCE,
+    EVENT_HOMEASSISTANT_STARTED,
     PERCENTAGE,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfSpeed,
     UnitOfTemperature,
-    CONF_NAME,
-    CONF_SOURCE,
-    EVENT_HOMEASSISTANT_STARTED,
 )
 from homeassistant.core import (
+    CALLBACK_TYPE,
+    Event,
     HomeAssistant,
     State,
     callback,
     split_entity_id,
-    Event,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
-    async_track_state_change_event,
     async_call_later,
+    async_track_state_change_event,
 )
-from homeassistant.core import CALLBACK_TYPE
 from homeassistant.util.unit_conversion import SpeedConverter, TemperatureConverter
 
 from .const import (
@@ -58,14 +58,14 @@ from .const import (
     ATTR_TEMPERATURE_SOURCE_VALUE,
     ATTR_WIND_SPEED_SOURCE,
     ATTR_WIND_SPEED_SOURCE_VALUE,
-    DOMAIN,
-    DEFAULT_NAME,
-    CONF_MODE,
-    MODE_WEATHER,
-    MODE_SEPARATE,
-    CONF_TEMPERATURE_SOURCE,
     CONF_HUMIDITY_SOURCE,
+    CONF_MODE,
+    CONF_TEMPERATURE_SOURCE,
     CONF_WIND_SOURCE,
+    DEFAULT_NAME,
+    DOMAIN,
+    MODE_SEPARATE,
+    MODE_WEATHER,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -169,7 +169,7 @@ class FeltTemperatureSensor(SensorEntity):
         _LOGGER.debug(
             "Running _setup_sources() to identify temperature, humidity and wind sources."
         )
-        entities = set()
+        entities = set(self._sources)
 
         # Nollställ inte redan hittade källor - men om vi upptäcker nya fuktighets-/vindkällor
         # kan vi sätta dem även om temp redan är funnen.
@@ -221,8 +221,6 @@ class FeltTemperatureSensor(SensorEntity):
                 self._wind = entity_id
                 _LOGGER.debug("Found wind source: %s", entity_id)
 
-            entities.add(entity_id)
-
         return list(entities)
 
     async def async_added_to_hass(self) -> None:
@@ -231,7 +229,7 @@ class FeltTemperatureSensor(SensorEntity):
         @callback
         def sensor_state_listener(event) -> None:
             """Handle device state changes."""
-            self.hass.add_job(self.async_schedule_update_ha_state, True)
+            self.async_schedule_update_ha_state(True)
 
         sources_to_watch = self._setup_sources()
         self._unsub_state_listener = async_track_state_change_event(
@@ -241,7 +239,7 @@ class FeltTemperatureSensor(SensorEntity):
         # Vänta tills Home Assistant startat fullt innan första uppdateringen + en liten fördröjning
         @callback
         def delayed_initial_update(_):
-            self.hass.add_job(self.async_schedule_update_ha_state, True)
+            self.async_schedule_update_ha_state(True)
 
         @callback
         def handle_ha_started(event: Event) -> None:
@@ -286,10 +284,9 @@ class FeltTemperatureSensor(SensorEntity):
             entity_unit = state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT)
         elif domain == CLIMATE_DOMAIN:
             temperature = state.attributes.get(ATTR_CURRENT_TEMPERATURE)
-            entity_unit = (
-                state.attributes.get(_ATTR_TEMPERATURE_UNIT)
-                or state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT)
-            )
+            entity_unit = state.attributes.get(
+                _ATTR_TEMPERATURE_UNIT
+            ) or state.attributes.get(ATTR_WEATHER_TEMPERATURE_UNIT)
         else:
             temperature = state.state
             entity_unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT)
